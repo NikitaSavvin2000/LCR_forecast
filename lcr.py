@@ -131,14 +131,11 @@ class TimeNormalization:
                                      )
         normalized_df[self.col_target] = self.normalize_column(normalized_df[self.col_target], min_val, max_val)
 
-        print(f'len = {len(normalized_df)}')
         normalized_df = normalized_df.dropna()
-        print(f'len = {len(normalized_df)}')
 
         return normalized_df, min_val, max_val
 
     def df_denormalize_with_meta(self, df, min_val, max_val):
-        print('Work fun')
         df = df.sort_values(by=['year', 'week', 'day_of_week', 'hour', 'minute'], ascending=True)
 
         def _convert_date(date_str):
@@ -353,7 +350,6 @@ df_all_data_norm = df_all_data_norm.reset_index()
 
 
 # TODO Здесь создаем данные для обучение и прогноз ---------------------------------------------------------------------
-columns = df_all_data_norm
 
 # Данные На Тренировку
 df = df_all_data_norm
@@ -363,7 +359,7 @@ df_test_all_col = df.loc[train_index + 1:]
 df_true_all_col = df_test_all_col.copy()
 df = df_all_data_norm[col_for_train]
 df_train = df.loc[:train_index]
-values = df_train[columns].values
+values = df_train[col_for_train].values
 X, y = split_sequence(values, lag)
 
 # Данные На предсказание
@@ -445,6 +441,7 @@ y_pred = df_comparative['P_l']
 # TODO Метрики ---------------------------------------------------------------------------------------------------------
 
 rmse, r2, mae, mape, wmape = calculate_metrics(y_true=y_true, y_pred=y_pred)
+
 print(f'RMSE = {rmse}')
 print(f'R-squared = {r2}')
 print(f'MAE = {mae}')
