@@ -1,0 +1,17 @@
+csv_train_data: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSyB_kQrfmaoG2nwsE0DbOMnyNbFUyH9IDKBJhR8yo4JdGAcLSTS1NTC2_Z4BIbwnRuIg58WChttoWa/pub?gid=1835661926&single=true&output=csv'
+lstm0_units: 150
+lstm1_units: 100
+lstm2_units: 50
+lag: 1
+dropout_count: 0.0
+dense_units: 30
+activation: 'relu'
+optimizer: 'adam'
+epochs: 10
+col_for_train: ['P_l', 'year', 'week', 'day_of_week', 'hour','minute','hour_sin', 'hour_cos', 'day_of_week_sin', 'day_of_week_cos', 'week_sin', 'week_cos','lcr']
+
+all_col_for_info: ['P_l', 'year', 'week', 'day_of_week', 'hour', 'minute', 'second',
+                   'hour_sin', 'hour_cos', 'day_of_week_sin', 'day_of_week_cos',
+                   'week_sin', 'week_cos', 'is_holiday', 'temperature', 'pressure',
+                   'dew_point', 'heat_index', 'humidity', 'solar_irradiance', 'uv_index',
+                   'wind_chill']
