@@ -79,21 +79,13 @@ class TimeNormalization:
     def meta_date(self, df):
 
         df_with_meta = df.copy()
-        # df_with_meta["test_time"] = pd.to_datetime(df_with_meta[self.col_time])
-        print('is working')
         df_with_meta[self.col_time] = pd.to_datetime(df_with_meta[self.col_time])
-        # df_with_meta[self.col_time] = pd.to_datetime(df_with_meta[self.col_time], format='%Y-%m-%d %H:%M:%S', errors='coerce')
-        print('is working')
 
         df_with_meta.set_index(self.col_time, inplace=True)
         df_with_meta['year'] = df_with_meta.index.year
-        print('is working')
-
         df_with_meta['week'] = df_with_meta.index.isocalendar().week
         df_with_meta['day_of_week'] = df_with_meta.index.dayofweek
         df_with_meta['hour'] = df_with_meta.index.hour
-        print('is working')
-
         df_with_meta['minute'] = df_with_meta.index.minute
         df_with_meta['second'] = df_with_meta.index.second
         df_with_meta['hour_sin'] = np.sin(2 * np.pi * df_with_meta['hour'] / 24)
@@ -106,8 +98,6 @@ class TimeNormalization:
         return df_with_meta
 
     def df_normalize_with_meta(self, df):
-        print('is working')
-
         df[self.col_target] = df[self.col_target].astype(float)
         min_val = df[self.col_target].min() * 1.2
         max_val = df[self.col_target].max() * 1.2
@@ -364,7 +354,6 @@ df_all_data_norm = df_all_data_norm.reset_index()
 
 # TODO Здесь создаем данные для обучение и прогноз ---------------------------------------------------------------------
 columns = df_all_data_norm
-df_all_data_norm = df_all_data_norm[[columns]]
 
 # Данные На Тренировку
 df = df_all_data_norm
