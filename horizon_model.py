@@ -7,14 +7,38 @@ import plotly.graph_objects as go
 
 from datetime import datetime, timedelta
 from plotly.subplots import make_subplots
+from tensorflow.keras.utils import plot_model
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.callbacks import Callback
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from tensorflow.keras.layers import LSTM, Dense, Bidirectional, Dropout
-from tensorflow.keras.layers import Layer
-import tensorflow.keras.backend as K
 
+tf.keras.backend.clear_session()
+
+import ssl
+
+ssl._create_default_https_context = ssl._create_stdlib_context
+
+date_for_test = '2023-12-17'
+params_file = '/Users/nikitasavvin/Desktop/Учеба/LCR_forecast/params.yaml'
+
+
+def replace_zeros_with_average(df, column):
+    values = df[column].values  # Получаем значения колонки как numpy массив
+    for i in range(len(values)):
+        if values[i] == 0:
+            # Получаем предыдущее значение, если оно существует
+            prev_value = values[i - 1] if i > 0 else None
+            # Получаем следующее значение, если оно существует
+            next_value = values[i + 1] if i < len(values) - 1 else None
+
+            # Рассчитываем среднее из существующих значений
+            neighbors = [v for v in [prev_value, next_value] if v is not None]
+            values[i] = np.mean(neighbors) if neighbors else 0  # Если соседей нет, оставляем 0
+
+    df[column] = values  # Обновляем колонку в DataFrame
+    return df
 
 class TimeNormalization:
 
@@ -291,7 +315,7 @@ def make_predictions_lcr(x_input, x_future):
 
 
 home_path = os.getcwd()
-params_file = '/home/nsavvin/Marco_prop/params.yaml'
+
 
 params_path = os.path.join(home_path, params_file)
 params = yaml.load(open(params_path, 'r'), Loader=yaml.SafeLoader)
@@ -328,7 +352,6 @@ df_all_data_norm[['temperature', 'pressure',
 
 # TODO Дата с которой делаем прогноз на сутки вперед ------------------------------------------------------------------
 
-date_for_test = '2023-12-16'
 
 date_1 = date_for_test + ' 00:00:00'
 date_2 = date_for_test + ' 00:05:00'
@@ -412,8 +435,9 @@ print(f"Прогнозируемые значения на {horizon} шагов:
 
 predict_values = np.array(predict_values).flatten()
 
-print(predict_values)
 df_forecast['P_l'] = predict_values
+df_forecast = replace_zeros_with_average(df_forecast, 'P_l')
+
 if len(diff_cols) > 0:
     for col in diff_cols:
         df_forecast[col] = df_true_all_col[col]
@@ -436,6 +460,7 @@ template = "presentation"
 
 fig_p_l.show()
 
+
 y_true = df_true['P_l']
 y_pred = df_comparative['P_l']
 
@@ -447,6 +472,11 @@ print(f'R-squared = {r2}')
 print(f'MAE = {mae}')
 print(f'MAPE = {mape}')
 print(f'WMAPE = {wmape}')
+
+model.summary()
+plot_model(model, show_shapes=True, to_file='model.png')
+fig_p_l.write_image("fig_p_l.png")
+
 
 # TODO Сохранение модели -----------------------------------------------------------------------------------------------
 
