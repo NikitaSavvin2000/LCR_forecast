@@ -13,6 +13,9 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.callbacks import Callback
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from tensorflow.keras.layers import LSTM, Dense, Bidirectional, Dropout
+from tensorflow.keras import regularizers
+
+
 
 tf.keras.backend.clear_session()
 
@@ -20,6 +23,15 @@ import ssl
 
 ssl._create_default_https_context = ssl._create_stdlib_context
 
+'2023-06-14'
+'2023-06-20'
+'2023-06-21'
+'2023-06-22'
+'2023-11-11'
+'2023-11-18'
+'2023-11-19'
+'2023-11-25'
+'2023-11-26'
 date_for_test = '2023-12-17'
 params_file = '/Users/nikitasavvin/Desktop/Учеба/LCR_forecast/params.yaml'
 
@@ -323,6 +335,7 @@ csv_train_data = params['csv_train_data']
 lstm0_units = params['lstm0_units']
 lstm1_units = params['lstm1_units']
 lstm2_units = params['lstm2_units']
+
 lag = params['lag']
 activation = params['activation']
 optimizer = params['optimizer']
@@ -352,17 +365,21 @@ df_all_data_norm[['temperature', 'pressure',
 
 # TODO Дата с которой делаем прогноз на сутки вперед ------------------------------------------------------------------
 
+# df_all_data_norm = df_all_data_norm.iloc[int(len(df_all_data_norm)/2):]
+# df_all_data_norm = df_all_data_norm.iloc[:-20]
 
 date_1 = date_for_test + ' 00:00:00'
 date_2 = date_for_test + ' 00:05:00'
 start_day = df_all_data[(df_all_data['time'] >= date_1) & (df_all_data['time'] <= date_2)]
 start_day_index = start_day.index[0]
-df_all_data_norm = df_all_data_norm[:start_day_index + 289]
+df_all_data_norm = df_all_data_norm[:start_day_index + 98 + 289]
 all_col = df_all_data_norm.columns
 print(f'Все доступные колонки - {all_col}')
 diff_cols = all_col.difference(col_for_train)
 
 # TODO Расчет LCR ------------------------------------------------------------------------------------------------------
+
+
 
 df_all_data_norm['lcr'] = (df_all_data_norm['P_l'].shift(1) - df_all_data_norm['P_l']) / df_all_data_norm['P_l']
 df_all_data_norm['lcr'] = df_all_data_norm['lcr'].shift(1)
@@ -406,19 +423,19 @@ model = Sequential()
 
 # model.add(Bidirectional(LSTM(lstm0_units, activation=activation), input_shape=(lag, n_features)))
 
-model.add(Bidirectional(LSTM(lstm0_units, activation=activation, return_sequences=True), input_shape=(lag, n_features)))
-model.add(Dropout(0.01))
-model.add(Bidirectional(LSTM(lstm1_units, activation=activation, return_sequences=True)))
-model.add(Dropout(0.01))
-model.add(Bidirectional(LSTM(lstm2_units, activation=activation)))
-model.add(Dropout(0.01))
-model.add(Dense(horizon, activation='relu'))  # Выходной слой предсказывает значения для горизонта
+model.add(Bidirectional(LSTM(lstm0_units, activation='softplus', return_sequences=True), input_shape=(lag, n_features)))
+# model.add(Dropout(0.1))
 
-model.compile(
-    optimizer=optimizer,
-    loss='mse',
-    metrics=['mse', 'mae']
-)
+model.add(Bidirectional(LSTM(lstm1_units, activation=activation, return_sequences=True)))
+# model.add(Dropout(0.1))
+
+model.add(Bidirectional(LSTM(lstm2_units, activation=activation)))
+# model.add(Dropout(0.1))
+model.add(Dense(horizon, activation='linear',
+                kernel_regularizer=regularizers.l2(0.01)))
+
+
+model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=['mae'])
 
 # TODO Обучение --------------------------------------------------------------------------------------------------------
 history = model.fit(X, y, epochs=epochs, verbose=1, callbacks=[save_best_weights_callback])
@@ -474,19 +491,18 @@ print(f'MAPE = {mape}')
 print(f'WMAPE = {wmape}')
 
 model.summary()
-plot_model(model, show_shapes=True, to_file='model.png')
-fig_p_l.write_image("fig_p_l.png")
+# plot_model(model, show_shapes=True, to_file='model.png')
+# fig_p_l.write_image("fig_p_l.png")
 
 
 # TODO Сохранение модели -----------------------------------------------------------------------------------------------
 
-# home_path_models = os.path.abspath('models')
-# name_model_dir = f'l0{lstm0_units}_l1{lstm1_units}_dc{dropout_count}_du{dense_units}_a_{activation}_o_{optimizer}_e{epochs}'
-# model_dir_path = os.path.join(home_path_models, name_model_dir)
-# os.makedirs(model_dir_path, exist_ok=True)
-# model_name = f'{name_model_dir}.h5'
-# model.save(os.path.join(model_dir_path, model_name))
-#
+name_model_dir = f'model_predict1'
+model_dir_path = '/Users/nikitasavvin/Desktop/Учеба/LCR_forecast'
+os.makedirs(model_dir_path, exist_ok=True)
+model_name = f'{name_model_dir}.h5'
+model.save(os.path.join(model_dir_path, model_name))
+
 # params_file_path = os.path.join(model_dir_path, 'params.yaml')
 # with open(params_file_path, 'w') as params_file:
 #     yaml.dump(params, params_file, default_flow_style=False)
