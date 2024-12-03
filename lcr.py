@@ -7,11 +7,18 @@ import plotly.graph_objects as go
 
 from datetime import datetime, timedelta
 from plotly.subplots import make_subplots
+from tensorflow.keras.utils import plot_model
 from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.callbacks import Callback
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from tensorflow.keras.layers import LSTM, Dense, Bidirectional, Dropout
+from tensorflow.keras import regularizers
+
+import ssl
+
+ssl._create_default_https_context = ssl._create_stdlib_context
+tf.keras.backend.clear_session()
 
 
 class TimeNormalization:
@@ -291,6 +298,8 @@ def make_predictions_lcr(x_input, x_future):
     return predict_values
 
 
+
+
 home_path = os.getcwd()
 params_file = 'params.yaml'
 
@@ -330,13 +339,13 @@ df_all_data_norm[['temperature', 'pressure',
 
 # TODO Дата с которой делаем прогноз на сутки вперед ------------------------------------------------------------------
 
-date_for_test = '2023-12-10'
+date_for_test = '2023-12-17'
 
 date_1 = date_for_test + ' 00:00:00'
 date_2 = date_for_test + ' 00:05:00'
 start_day = df_all_data[(df_all_data['time'] >= date_1) & (df_all_data['time'] <= date_2)]
 start_day_index = start_day.index[0]
-df_all_data_norm = df_all_data_norm[:start_day_index + 289]
+df_all_data_norm = df_all_data_norm[:start_day_index + 98 + 289]
 all_col = df_all_data_norm.columns
 print(f'Все доступные колонки - {all_col}')
 diff_cols = all_col.difference(col_for_train)
@@ -381,14 +390,17 @@ save_best_weights_callback = SaveBestWeights()
 model = Sequential()
 
 # model.add(Bidirectional(LSTM(lstm0_units, activation=activation), input_shape=(lag, n_features)))
+model.add(Bidirectional(LSTM(lstm0_units, activation='softplus', return_sequences=True), input_shape=(lag, n_features)))
+# model.add(Dropout(0.1))
 
-model.add(Bidirectional(LSTM(lstm0_units, activation=activation, return_sequences=True), input_shape=(lag, n_features)))
-model.add(Dropout(0.01))
 model.add(Bidirectional(LSTM(lstm1_units, activation=activation, return_sequences=True)))
-model.add(Dropout(0.01))
+# model.add(Dropout(0.1))
+
 model.add(Bidirectional(LSTM(lstm2_units, activation=activation)))
-model.add(Dropout(0.01))
-model.add(Dense(1, activation='relu'))
+# model.add(Dropout(0.1))
+model.add(Dense(1, activation='linear',
+                kernel_regularizer=regularizers.l2(0.005)))
+
 
 model.compile(
     optimizer=optimizer,

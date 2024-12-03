@@ -432,7 +432,7 @@ model.add(Bidirectional(LSTM(lstm1_units, activation=activation, return_sequence
 model.add(Bidirectional(LSTM(lstm2_units, activation=activation)))
 # model.add(Dropout(0.1))
 model.add(Dense(horizon, activation='linear',
-                kernel_regularizer=regularizers.l2(0.01)))
+                kernel_regularizer=regularizers.l2(0.005)))
 
 
 model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=['mae'])

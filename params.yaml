@@ -1,17 +1,21 @@
 csv_train_data: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSyB_kQrfmaoG2nwsE0DbOMnyNbFUyH9IDKBJhR8yo4JdGAcLSTS1NTC2_Z4BIbwnRuIg58WChttoWa/pub?gid=1835661926&single=true&output=csv'
-lstm0_units: 64
-lstm1_units: 32
-lstm2_units: 16
+lstm0_units: 50
+lstm1_units: 100
+lstm2_units: 150
 
 lag: 4
+points_per_call: 6
+
 dropout_count: 0.0
 dense_units: 30
 activation: 'relu'
 #activation: 'tanh'
 
 optimizer: 'adam'
-epochs: 10
-col_for_train: ['P_l', 'week', 'day_of_week', 'hour', 'minute', 'lcr']
+epochs: 5
+col_for_train: ['P_l', 'year', 'week', 'day_of_week', 'hour', 'minute',
+                'hour_sin', 'hour_cos', 'day_of_week_sin', 'day_of_week_cos',
+                'week_sin', 'week_cos', 'lcr']
 
 all_col_for_info: ['P_l', 'year', 'week', 'day_of_week', 'hour', 'minute', 'second',
                    'hour_sin', 'hour_cos', 'day_of_week_sin', 'day_of_week_cos',
