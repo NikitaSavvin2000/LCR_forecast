@@ -290,11 +290,33 @@ def create_x_input(df_train, n_steps):
     return x_input
 
 
-def make_predictions(x_input):
-    x_input_tensor = tf.convert_to_tensor(x_input.reshape((1, lag, n_features)), dtype=tf.float32)
-    predict_values = model.predict(x_input_tensor, verbose=0)
-    return predict_values[0]  # Возвращаем предсказания для горизонта
+def make_predictions(x_input, x_future, points_per_call):
+    predict_values = []
+    x_future_len = len(x_future)
+    remaining_horizon = x_future_len
 
+    while remaining_horizon > 0:
+        current_points_to_predict = min(remaining_horizon, points_per_call)
+        x_input_tensor = tf.convert_to_tensor(x_input.reshape((1, x_input.shape[1], x_input.shape[2])), dtype=tf.float32)
+        y_predict = model.predict(x_input_tensor, verbose=1)
+
+        if len(y_predict.shape) == 2 and y_predict.shape[0] == 1:
+            y_predict = y_predict[0]
+
+        y_predict = y_predict[:current_points_to_predict]
+        predict_values.extend(y_predict)
+
+        for i in range(current_points_to_predict):
+            cur_val = y_predict[i]
+            x_input = np.delete(x_input, (0), axis=1)
+            future_lag = x_future[0]
+            x_future = np.delete(x_future, 0, axis=0)
+            future_lag[0] = cur_val
+            x_input = np.append(x_input, future_lag.reshape(1, 1, -1), axis=1)
+
+        remaining_horizon -= current_points_to_predict
+
+    return predict_values
 
 
 def calc_lcr(previous_val, cur_val):
@@ -305,28 +327,8 @@ def calc_lcr(previous_val, cur_val):
     return percentage_change
 
 
-def make_predictions_lcr(x_input, x_future):
-    predict_values = []
-    x_future_len = len(x_future)
 
-    for i in range(x_future_len):
-        x_input_tensor = tf.convert_to_tensor(x_input.reshape((1, lag, n_features)), dtype=tf.float32)
-        privios_val = x_input_tensor[0][-1][0]
-        y_predict = model.predict(x_input_tensor, verbose=0)
-        cur_val = y_predict[0][0]
-        lcr = calc_lcr(previous_val=privios_val, cur_val=cur_val)
-        predict_values.append(y_predict)
-        x_input = np.delete(x_input, (0), axis=1)
-        future_lag = x_future[0]
-        x_future = np.delete(x_future, 0, axis=0)
-        future_lag[0] = y_predict
-        x_input = np.append(x_input, future_lag.reshape(1, 1, -1), axis=1)
-        x_input[0][-1][-1] = lcr
-
-    return predict_values
-
-
-def make_predictions_lcr_2(x_input, x_future, points_per_call):
+def make_predictions_lcr(x_input, x_future, points_per_call):
     """
     Выполняет рекурсивный прогноз на основе x_input и x_future.
 
@@ -469,7 +471,8 @@ df_test['P_l'] = None
 df_forecast = df_test.copy()
 x_input = create_x_input(df_train, lag)
 df_test_no_lcr = df_test.copy()
-df_test_no_lcr['lcr'] = None
+if 'lcr' in col_for_train:
+    df_test_no_lcr['lcr'] = None
 x_future = df_test_no_lcr.values
 n_features = values.shape[1]
 
@@ -493,7 +496,7 @@ model.add(Bidirectional(LSTM(lstm1_units, activation=activation, return_sequence
 model.add(Bidirectional(LSTM(lstm2_units, activation=activation)))
 # model.add(Dropout(0.1))
 model.add(Dense(points_per_call, activation='linear',
-                kernel_regularizer=regularizers.l2(0.005)))
+                kernel_regularizer=regularizers.l2(0.05)))
 
 
 model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=['mae'])
@@ -506,7 +509,11 @@ history = model.fit(X, y, epochs=epochs, verbose=1, callbacks=[save_best_weights
 
 x_input = create_x_input(df_train, lag)
 x_input = x_input.reshape((1, lag, n_features))
-predict_values = make_predictions_lcr_2(x_input, x_future, points_per_call)
+if 'lcr' in col_for_train:
+    predict_values = make_predictions_lcr(x_input, x_future, points_per_call)
+else:
+    predict_values = make_predictions(x_input, x_future, points_per_call)
+
 # predict_values = make_predictions(x_input)
 
 print(f"Прогнозируемые значения : {predict_values}")
