@@ -531,6 +531,9 @@ BASE_PATH = f"{home_path}/experiments"
 
 for model_type, model in model_type_chitecture.items():
 
+    tf.keras.backend.clear_session()
+
+
     flag = f'>>> Current model - {model_type} <<<'
     print("-"*len(flag))
     print(flag)
