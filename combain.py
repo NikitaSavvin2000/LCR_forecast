@@ -19,6 +19,7 @@ from tensorflow.keras.layers import LSTM, Dense, Bidirectional, Dropout, Input, 
 from tensorflow.keras import regularizers
 
 
+
 tf.keras.backend.clear_session()
 
 home_path = os.getcwd()
@@ -374,7 +375,6 @@ optimizer = params['optimizer']
 dense_units = params['dense_units']
 dropout_count = params['dropout_count']
 epochs = params['epochs']
-col_for_train = params['col_for_train']
 points_per_call = params['points_per_call']
 
 df_all_data = pd.read_csv(csv_train_data)
@@ -404,7 +404,6 @@ start_day = df_all_data[(df_all_data['time'] >= date_1) & (df_all_data['time'] <
 start_day_index = start_day.index[0]
 df_all_data_norm = df_all_data_norm[:start_day_index + 98 + 289]
 all_col = df_all_data_norm.columns
-diff_cols = all_col.difference(col_for_train)
 
 # TODO Расчет LCR ------------------------------------------------------------------------------------------------------
 
@@ -416,241 +415,277 @@ df_all_data_norm = df_all_data_norm[2:]
 df_all_data_norm = df_all_data_norm.reset_index()
 
 
-# TODO Здесь создаем данные для обучение и прогноз ---------------------------------------------------------------------
+# model_type_chitecture = ["LSTM", "Bi-LSTM", "CNN-LSTM", "CNN-BI-LSTM"]
 
-# Данные На Тренировку
-df = df_all_data_norm
-train_index = len(df) - 288
-df_train_all_col = df.loc[:train_index]
-df_test_all_col = df.loc[train_index + 1:]
-df_true_all_col = df_test_all_col.copy()
-df = df_all_data_norm[col_for_train]
-df_train = df.loc[:train_index]
-values = df_train[col_for_train].values
-# X, y = split_sequence(values, lag)
+model_type_chitecture = ["Bi-LSTM"]
 
-X, y = split_sequence(values, lag, points_per_call)
-
-# Данные На предсказание
-df_test = df.loc[train_index + 1:]
-df_true = df_test.copy()
-df_test['P_l'] = None
-df_forecast = df_test.copy()
-x_input = create_x_input(df_train, lag)
-df_test_no_lcr = df_test.copy()
-if 'lcr' in col_for_train:
-    df_test_no_lcr['lcr'] = None
-x_future = df_test_no_lcr.values
-n_features = values.shape[1]
-
-save_best_weights_callback = SaveBestWeights()
+case_A = ['P_l',  'week', 'day_of_week', 'hour', 'minute',]
+case_B = ['P_l',  'week', 'day_of_week', 'hour', 'minute', 'temperature']
+case_C = ['P_l',  'week', 'day_of_week', 'hour', 'minute', 'hour_cos', 'week_cos']
+case_D = ['P_l',  'week', 'day_of_week', 'hour', 'minute', 'hour_cos', 'week_cos', 'temperature']
+case_E = ['P_l',  'week', 'day_of_week', 'hour', 'minute', 'lcr']
+case_F = ['P_l', 'week', 'day_of_week', 'hour', 'minute', 'hour_sin', 'hour_cos', 'day_of_week_sin', 'day_of_week_cos', 'week_sin', 'week_cos', 'lcr']
 
 
-# TODO Здесь задаем конфигурацию модели слои и тд --------------------------------------------------------------------
-
-
-# TODO  ---------------------------------Построение разновидности моделей-----------------------------------------------
-
-
-# TODO ---------BI-LSTM model------------------------------------------------------------------------------------------
-
-
-bi_lstm_model = Sequential()
-
-bi_lstm_model.add(Input(shape=(lag, n_features)))
-
-bi_lstm_model.add(Bidirectional(LSTM(lstm0_units, activation='softplus', return_sequences=True)))
-bi_lstm_model.add(Bidirectional(LSTM(lstm1_units, activation=activation, return_sequences=True)))
-bi_lstm_model.add(Bidirectional(LSTM(lstm2_units, activation=activation)))
-bi_lstm_model.add(Dense(points_per_call, activation='linear', kernel_regularizer=regularizers.l2(0.001)))
-
-bi_lstm_model.compile(optimizer='adam', loss='mean_squared_error', metrics=['mae'])
-
-
-# TODO ---------LSTM model----------------------------------------------------------------------------------------------
-
-lstm_model = Sequential()
-
-lstm_model.add(LSTM(lstm0_units, activation='softplus', return_sequences=True, input_shape=(lag, n_features)))
-lstm_model.add(LSTM(lstm1_units, activation=activation, return_sequences=True))
-lstm_model.add(LSTM(lstm2_units, activation=activation))
-lstm_model.add(Dense(points_per_call, activation='linear', kernel_regularizer=regularizers.l2(0.001)))
-
-lstm_model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=['mae'])
-
-
-# TODO ---------CNN-LSTM model------------------------------------------------------------------------------------------
-
-cnn_lstm_model = Sequential()
-cnn_lstm_model.add(Conv1D(filters=64, kernel_size=1, activation='relu', input_shape=(lag, n_features)))
-cnn_lstm_model.add(MaxPooling1D(pool_size=1))
-
-cnn_lstm_model.add(Conv1D(filters=128, kernel_size=1, activation='relu'))
-cnn_lstm_model.add(MaxPooling1D(pool_size=1))
-
-cnn_lstm_model.add(LSTM(lstm0_units, activation='softplus', return_sequences=True))
-cnn_lstm_model.add(LSTM(lstm1_units, activation=activation, return_sequences=True))
-cnn_lstm_model.add(LSTM(lstm2_units, activation=activation))
-
-cnn_lstm_model.add(Dense(points_per_call, activation='linear', kernel_regularizer=regularizers.l2(0.001)))
-
-cnn_lstm_model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=['mae'])
-
-
-# TODO ---------CNN-BI-LSTM model---------------------------------------------------------------------------------------
-
-cnn_bi_lstm_model = Sequential()
-
-cnn_bi_lstm_model.add(Conv1D(filters=64, kernel_size=1, activation='relu', input_shape=(lag, n_features)))
-cnn_bi_lstm_model.add(MaxPooling1D(pool_size=1))
-
-cnn_bi_lstm_model.add(Conv1D(filters=128, kernel_size=1, activation='relu'))
-cnn_bi_lstm_model.add(MaxPooling1D(pool_size=1))
-
-cnn_bi_lstm_model.add(Bidirectional(LSTM(lstm0_units, activation='softplus', return_sequences=True)))
-cnn_bi_lstm_model.add(Bidirectional(LSTM(lstm1_units, activation=activation, return_sequences=True)))
-cnn_bi_lstm_model.add(Bidirectional(LSTM(lstm2_units, activation=activation)))
-
-cnn_bi_lstm_model.add(Dense(points_per_call, activation='linear', kernel_regularizer=regularizers.l2(0.001)))
-
-cnn_bi_lstm_model.compile(optimizer='adam', loss='mean_squared_error', metrics=['mae'])
-
-
-
-
-model_type_chitecture = {
-    "LSTM": lstm_model,
-    "Bi-LSTM": bi_lstm_model,
-    "CNN-LSTM": cnn_lstm_model
-    "CNN-BI-LSTM": cnn_bi_lstm_model
+train_col_dict = {
+    # 'case_A': case_A,
+    # 'case_B': case_B,
+    # 'case_C': case_C,
+    # 'case_D': case_D,
+    # 'case_E': case_E,
+    'case_F': case_F,
 }
 
 
+count_experements = 1
+step = 1
+
 BASE_PATH = f"{home_path}/experiments"
 
+res_dict = {}
 
-for model_type, model in model_type_chitecture.items():
-
-    tf.keras.backend.clear_session()
-
-
-    flag = f'>>> Current model - {model_type} <<<'
-    print("-"*len(flag))
-    print(flag)
-    print("-"*len(flag))
+for model_type in model_type_chitecture:
 
     model_dir = os.path.join(BASE_PATH, model_type)
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
 
-    destination_params = os.path.join(model_dir, 'params.yaml')
-    shutil.copy(params_file, destination_params)
+    for dir_name, col_for_train in train_col_dict.items():
 
-    destination_snapshot = os.path.join(model_dir, 'snapshot_combain.py')
-    shutil.copy(cur_running_path, destination_snapshot)
+        dir = os.path.join(model_dir, dir_name)
+        if not os.path.exists(dir):
+            os.makedirs(dir)
+
+        destination_params = os.path.join(dir, 'params.yaml')
+        shutil.copy(params_file, destination_params)
+
+        destination_snapshot = os.path.join(dir, 'snapshot_combain.py')
+        shutil.copy(cur_running_path, destination_snapshot)
+        for i in range(1, count_experements+1):
+        # for i in range(start_value, start_value + count_experements * step, step):
+            tf.keras.utils.set_random_seed(91)
+            tf.config.experimental.enable_op_determinism()
+
+            dir_name_experiment = f"{i}_experiment"
+
+            experiment_dir = os.path.join(dir, dir_name_experiment)
+            if not os.path.exists(experiment_dir):
+                os.makedirs(experiment_dir)
+
+            tf.keras.backend.clear_session()
+
+            col_for_train_dir = os.path.join(dir, 'col_for_train.txt')
+
+            with open(col_for_train_dir, 'w') as file:
+                file.write(str(col_for_train))
+
+            flag = f'>>> Current model - {model_type} <<<'
+            print("-"*len(flag))
+            print(flag)
+            print("-"*len(flag))
 
 
 
-    # TODO Обучение --------------------------------------------------------------------------------------------------------
-    history = model.fit(X, y, epochs=epochs, verbose=1, callbacks=[save_best_weights_callback])
+        # TODO Здесь создаем данные для обучение и прогноз ---------------------------------------------------------------------
 
-    # TODO Прогноз ---------------------------------------------------------------------------------------------------------
+            diff_cols = all_col.difference(col_for_train)
+
+            # Данные На Тренировку
+            df = df_all_data_norm
+            train_index = len(df) - 288
+            df_train_all_col = df.loc[:train_index]
+            df_test_all_col = df.loc[train_index + 1:]
+            df_true_all_col = df_test_all_col.copy()
+            df = df_all_data_norm[col_for_train]
+            df_train = df.loc[:train_index]
+            values = df_train[col_for_train].values
+
+            X, y = split_sequence(values, lag, points_per_call)
+
+            # Данные На предсказание
+            df_test = df.loc[train_index + 1:]
+            df_true = df_test.copy()
+            df_test['P_l'] = None
+            df_forecast = df_test.copy()
+            x_input = create_x_input(df_train, lag)
+            df_test_no_lcr = df_test.copy()
+            if 'lcr' in col_for_train:
+                df_test_no_lcr['lcr'] = None
+            x_future = df_test_no_lcr.values
+            n_features = values.shape[1]
+
+            save_best_weights_callback = SaveBestWeights()
 
 
-    x_input = create_x_input(df_train, lag)
-    x_input = x_input.reshape((1, lag, n_features))
-    if 'lcr' in col_for_train:
-        predict_values = make_predictions_lcr(x_input, x_future, points_per_call)
-    else:
-        predict_values = make_predictions(x_input, x_future, points_per_call)
+            # TODO Здесь задаем конфигурацию модели слои и тд --------------------------------------------------------------------
 
-    predict_values = np.array(predict_values).flatten()
 
-    df_forecast['P_l'] = predict_values
-    df_forecast = replace_zeros_with_average(df_forecast, 'P_l')
+            # TODO  ---------------------------------Построение разновидности моделей-----------------------------------------------
 
-    if len(diff_cols) > 0:
-        for col in diff_cols:
+
+            # TODO ---------BI-LSTM model------------------------------------------------------------------------------------------
+
+            if model_type == 'Bi-LSTM':
+                bi_lstm_model = Sequential()
+
+                bi_lstm_model.add(Input(shape=(lag, n_features)))
+
+                bi_lstm_model.add(Bidirectional(LSTM(lstm0_units, activation='softplus', return_sequences=True)))
+                bi_lstm_model.add(Bidirectional(LSTM(lstm1_units, activation=activation, return_sequences=True)))
+                bi_lstm_model.add(Bidirectional(LSTM(lstm2_units, activation=activation)))
+                bi_lstm_model.add(Dense(points_per_call, activation='linear', kernel_regularizer=regularizers.l2(0.001)))
+
+                bi_lstm_model.compile(optimizer='adam', loss='mean_squared_error', metrics=['mae'])
+                model = bi_lstm_model
+
+            # TODO ---------LSTM model----------------------------------------------------------------------------------------------
+
+            if model_type == 'LSTM':
+                lstm_model = Sequential()
+
+                lstm_model.add(LSTM(lstm0_units, activation='softplus', return_sequences=True, input_shape=(lag, n_features)))
+                lstm_model.add(LSTM(lstm1_units, activation=activation, return_sequences=True))
+                lstm_model.add(LSTM(lstm2_units, activation=activation))
+                lstm_model.add(Dense(points_per_call, activation='linear', kernel_regularizer=regularizers.l2(0.001)))
+
+                lstm_model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=['mae'])
+                model = lstm_model
+
+
+        # TODO ---------CNN-LSTM model------------------------------------------------------------------------------------------
+
+            if model_type == 'CNN-LSTM':
+
+                cnn_lstm_model = Sequential()
+                cnn_lstm_model.add(Conv1D(filters=64, kernel_size=1, activation='relu', input_shape=(lag, n_features)))
+                cnn_lstm_model.add(MaxPooling1D(pool_size=1))
+
+                cnn_lstm_model.add(Conv1D(filters=128, kernel_size=1, activation='relu'))
+                cnn_lstm_model.add(MaxPooling1D(pool_size=1))
+
+                cnn_lstm_model.add(LSTM(lstm0_units, activation='softplus', return_sequences=True))
+                cnn_lstm_model.add(LSTM(lstm1_units, activation=activation, return_sequences=True))
+                cnn_lstm_model.add(LSTM(lstm2_units, activation=activation))
+
+                cnn_lstm_model.add(Dense(points_per_call, activation='linear', kernel_regularizer=regularizers.l2(0.001)))
+
+                cnn_lstm_model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=['mae'])
+                model = cnn_lstm_model
+
+
+        # TODO ---------CNN-BI-LSTM model---------------------------------------------------------------------------------------
+
+            if model_type == 'CNN-BI-LSTM':
+                cnn_bi_lstm_model = Sequential()
+
+                cnn_bi_lstm_model.add(Conv1D(filters=64, kernel_size=1, activation='relu', input_shape=(lag, n_features)))
+                cnn_bi_lstm_model.add(MaxPooling1D(pool_size=1))
+
+                cnn_bi_lstm_model.add(Conv1D(filters=128, kernel_size=1, activation='relu'))
+                cnn_bi_lstm_model.add(MaxPooling1D(pool_size=1))
+
+                cnn_bi_lstm_model.add(Bidirectional(LSTM(lstm0_units, activation='softplus', return_sequences=True)))
+                cnn_bi_lstm_model.add(Bidirectional(LSTM(lstm1_units, activation=activation, return_sequences=True)))
+                cnn_bi_lstm_model.add(Bidirectional(LSTM(lstm2_units, activation=activation)))
+
+                cnn_bi_lstm_model.add(Dense(points_per_call, activation='linear', kernel_regularizer=regularizers.l2(0.001)))
+
+                cnn_bi_lstm_model.compile(optimizer='adam', loss='mean_squared_error', metrics=['mae'])
+
+                model = cnn_bi_lstm_model
+
+
+
+            # TODO Обучение --------------------------------------------------------------------------------------------------------
+            history = model.fit(X, y, epochs=epochs, verbose=1, callbacks=[save_best_weights_callback])
+
+            # TODO Прогноз ---------------------------------------------------------------------------------------------------------
+
+
+            x_input = create_x_input(df_train, lag)
+            x_input = x_input.reshape((1, lag, n_features))
+            if 'lcr' in col_for_train:
+                predict_values = make_predictions_lcr(x_input, x_future, points_per_call)
+            else:
+                predict_values = make_predictions(x_input, x_future, points_per_call)
+
+            predict_values = np.array(predict_values).flatten()
+
+            df_forecast['P_l'] = predict_values
+            df_forecast = replace_zeros_with_average(df_forecast, 'P_l')
+
+            if len(diff_cols) > 0:
+                for col in diff_cols:
+                    df_forecast[col] = df_true_all_col[col]
+
             df_forecast[col] = df_true_all_col[col]
+            df_comparative = tn.df_denormalize_with_meta(df_forecast, min_val, max_val)
 
-    df_forecast[col] = df_true_all_col[col]
-    df_comparative = tn.df_denormalize_with_meta(df_forecast, min_val, max_val)
+            df_predict = df_comparative.copy()
+            df_predict = df_predict[["P_l", "time"]]
+            path = f"{experiment_dir}/predict.xlsx"
+            df_predict.to_excel(path, index=False)
 
-    df_predict = df_comparative.copy()
-    df_predict = df_predict[["P_l", "time"]]
-    path = f"{model_dir}/predict.xlsx"
-    df_predict.to_excel(path, index=False)
-
-    df_true = tn.df_denormalize_with_meta(df_true_all_col, min_val, max_val)
+            df_true = tn.df_denormalize_with_meta(df_true_all_col, min_val, max_val)
 
 
-    # TODO Отрисовка -------------------------------------------------------------------------------------------------------
+            # TODO Отрисовка -------------------------------------------------------------------------------------------------------
 
-    fig_p_l = make_subplots(rows=1, cols=1, subplot_titles=['P_l_real vs P_l_predict'])
+            fig_p_l = make_subplots(rows=1, cols=1, subplot_titles=['P_l_real vs P_l_predict'])
 
-    fig_p_l.add_trace(
-        go.Scatter(x=df_true['time'], y=df_true['P_l'], mode='lines', name='P_l_real', line=dict(color='blue')), row=1,
-        col=1)
-    fig_p_l.add_trace(go.Scatter(x=df_comparative['time'], y=df_comparative['P_l'], mode='lines', name='P_l_predict',
-                                 line=dict(color='orange')), row=1, col=1)
-    template = "presentation"
+            fig_p_l.add_trace(
+                go.Scatter(x=df_true['time'], y=df_true['P_l'], mode='lines', name='P_l_real', line=dict(color='blue')), row=1,
+                col=1)
+            fig_p_l.add_trace(go.Scatter(x=df_comparative['time'], y=df_comparative['P_l'], mode='lines', name='P_l_predict',
+                                         line=dict(color='orange')), row=1, col=1)
+            template = "presentation"
 
-    fig_p_l.update_layout(template="presentation")
+            fig_p_l.update_layout(template="presentation")
 
-    output_path = f"{model_dir}/real_vs_predict.html"
+            output_path = f"{experiment_dir}/real_vs_predict.html"
 
-    fig_p_l.write_html(output_path)
+            fig_p_l.write_html(output_path)
 
-    fig_p_l.show()
+            y_true = df_true['P_l']
+            y_pred = df_comparative['P_l']
 
-    y_true = df_true['P_l']
-    y_pred = df_comparative['P_l']
+            # TODO Метрики ---------------------------------------------------------------------------------------------------------
 
-    # TODO Метрики ---------------------------------------------------------------------------------------------------------
+            rmse, r2, mae, mape, wmape = calculate_metrics(y_true=y_true, y_pred=y_pred)
 
-    rmse, r2, mae, mape, wmape = calculate_metrics(y_true=y_true, y_pred=y_pred)
+            print(f'MAPE = {mape}')
 
-    print(f'MAPE = {mape}')
+            metrix_dict = {
+                "RMSE": rmse,
+                "R-squared": r2,
+                "MAE": mae,
+                "MAPE": mape,
+                "WMAPE": wmape
+            }
 
-    metrix_dict = {
-        "RMSE": rmse,
-        "R-squared": r2,
-        "MAE": mae,
-        "MAPE": mape,
-        "WMAPE": wmape
-    }
+            res_dict[experiment_dir] = mape
 
-    df_metrics = pd.DataFrame(list(metrix_dict.items()), columns=['Metric', 'Value'])
+            df_metrics = pd.DataFrame(list(metrix_dict.items()), columns=['Metric', 'Value'])
 
-    output_path = f"{model_dir}/metrics.xlsx"
-    df_metrics.to_excel(output_path, index=False)
-
-
-    model.summary()
-
-    output_path = f"{model_dir}/model_summary.txt"
-
-    with open(output_path, "w") as f:
-        with io.StringIO() as buf:
-            model.summary(print_fn=lambda x: buf.write(x + "\n"))
-            f.write(buf.getvalue())
+            output_path = f"{experiment_dir}/metrics.xlsx"
+            df_metrics.to_excel(output_path, index=False)
 
 
-    path = f"{model_dir}/model_architecture.png"
+            # model.summary()
 
-    plot_model(model, show_shapes=True, to_file=path)
+            output_path = f"{experiment_dir}/model_summary.txt"
+
+            with open(output_path, "w") as f:
+                with io.StringIO() as buf:
+                    model.summary(print_fn=lambda x: buf.write(x + "\n"))
+                    f.write(buf.getvalue())
 
 
-    # TODO График потерь --------------------------------------------------------------------------------------------------
+            path = f"{experiment_dir}/model_architecture.png"
 
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=list(range(1, len(history.history['loss']) + 1)), y=history.history['loss'], mode='lines'))
-    fig.update_layout(title='Model Training Loss (Interactive)',
-                      xaxis_title='Epoch',
-                      yaxis_title='Loss',
-                      template='plotly_dark',
-                      hovermode='x')
+            plot_model(model, show_shapes=True, to_file=path)
 
-    html_file_path = os.path.join(model_dir, 'training_loss_plot_interactive.html')
-    fig.show()
-    fig.write_html(html_file_path)
+df = pd.DataFrame(list(res_dict.items()), columns=['path', 'mape'])
+
+df.to_excel(f'{BASE_PATH}/results.xlsx', index=False)
+df.to_csv(f'{BASE_PATH}/results.csv', index=False)
