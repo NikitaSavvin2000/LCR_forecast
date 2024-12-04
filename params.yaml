@@ -12,7 +12,7 @@ activation: 'relu'
 #activation: 'tanh'
 
 optimizer: 'adam'
-epochs: 5
+epochs: 1
 col_for_train: ['P_l', 'year', 'week', 'day_of_week', 'hour', 'minute',
                 'hour_sin', 'hour_cos', 'day_of_week_sin', 'day_of_week_cos',
                 'week_sin', 'week_cos',]

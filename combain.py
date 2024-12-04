@@ -1,5 +1,8 @@
+import io
 import os
+import ssl
 import yaml
+import shutil
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -16,24 +19,18 @@ from tensorflow.keras.layers import LSTM, Dense, Bidirectional, Dropout
 from tensorflow.keras import regularizers
 
 
-
 tf.keras.backend.clear_session()
 
-import ssl
+home_path = os.getcwd()
+
 
 ssl._create_default_https_context = ssl._create_stdlib_context
 
-'2023-06-14'
-'2023-06-20'
-'2023-06-21'
-'2023-06-22'
-'2023-11-11'
-'2023-11-18'
-'2023-11-19'
-'2023-11-25'
-'2023-11-26'
+
 date_for_test = '2023-12-17'
-params_file = '/Users/nikitasavvin/Desktop/Учеба/LCR_forecast/params.yaml'
+
+params_file = f'{home_path}/params.yaml'
+cur_running_path = f"{home_path}/combain.py"
 
 
 def replace_zeros_with_average(df, column):
@@ -51,6 +48,7 @@ def replace_zeros_with_average(df, column):
 
     df[column] = values  # Обновляем колонку в DataFrame
     return df
+
 
 class TimeNormalization:
 
@@ -176,7 +174,6 @@ class TimeNormalization:
         return normalized_df, min_val, max_val
 
     def df_denormalize_with_meta(self, df, min_val, max_val):
-        print('Work fun')
         df = df.sort_values(by=['year', 'week', 'day_of_week', 'hour', 'minute'], ascending=True)
 
         def _convert_date(date_str):
@@ -233,7 +230,6 @@ class TimeNormalization:
         return denormalized_df
 
 
-
 class SaveBestWeights(Callback):
     def __init__(self):
         super(SaveBestWeights, self).__init__()
@@ -270,6 +266,7 @@ def calculate_metrics(y_true, y_pred):
 
     return rmse, r2, mae, mape, wmape
 
+
 def split_sequence(sequence, n_steps, horizon):
     X, y = [], []
     for i in range(len(sequence)):
@@ -281,7 +278,6 @@ def split_sequence(sequence, n_steps, horizon):
         X.append(seq_x)
         y.append(seq_y)
     return np.array(X), np.array(y)
-
 
 
 def create_x_input(df_train, n_steps):
@@ -298,7 +294,7 @@ def make_predictions(x_input, x_future, points_per_call):
     while remaining_horizon > 0:
         current_points_to_predict = min(remaining_horizon, points_per_call)
         x_input_tensor = tf.convert_to_tensor(x_input.reshape((1, x_input.shape[1], x_input.shape[2])), dtype=tf.float32)
-        y_predict = model.predict(x_input_tensor, verbose=1)
+        y_predict = model.predict(x_input_tensor, verbose=0)
 
         if len(y_predict.shape) == 2 and y_predict.shape[0] == 1:
             y_predict = y_predict[0]
@@ -327,7 +323,6 @@ def calc_lcr(previous_val, cur_val):
     return percentage_change
 
 
-
 def make_predictions_lcr(x_input, x_future, points_per_call):
     """
     Выполняет рекурсивный прогноз на основе x_input и x_future.
@@ -342,52 +337,38 @@ def make_predictions_lcr(x_input, x_future, points_per_call):
     remaining_horizon = x_future_len
 
     while remaining_horizon > 0:
-        # Количество точек для текущего вызова модели
         current_points_to_predict = min(remaining_horizon, points_per_call)
 
-        # Преобразуем x_input в тензор
         x_input_tensor = tf.convert_to_tensor(x_input.reshape((1, x_input.shape[1], x_input.shape[2])), dtype=tf.float32)
 
-        y_predict = model.predict(x_input_tensor, verbose=1)
+        y_predict = model.predict(x_input_tensor, verbose=0)
 
-        # Преобразуем y_predict из (1, points_per_call) в (points_per_call,)
         if len(y_predict.shape) == 2 and y_predict.shape[0] == 1:
-            y_predict = y_predict[0]  # Теперь y_predict имеет форму (points_per_call,)
+            y_predict = y_predict[0]
 
-        # Берем нужное количество точек
         y_predict = y_predict[:current_points_to_predict]
-
-        # Добавляем предсказания в общий список
-        # predict_values.extend(y_predict[:, 0])  # y_predict имеет размерность (current_points_to_predict, 1)
-        predict_values.extend(y_predict)  # y_predict имеет размерность (current_points_to_predict, 1)
+        predict_values.extend(y_predict)
 
 
-        # Обновляем x_input и x_future для следующих итераций
         for i in range(current_points_to_predict):
             privios_val = x_input[0, -1, 0]
-            cur_val = y_predict[i]       # Текущий предсказанный элемент
+            cur_val = y_predict[i]
 
-            lcr = calc_lcr(previous_val=privios_val, cur_val=cur_val)  # Рассчитываем LCR
+            lcr = calc_lcr(previous_val=privios_val, cur_val=cur_val)
 
             x_input = np.delete(x_input, (0), axis=1)
 
-            # Берем следующую lag из x_future
             future_lag = x_future[0]
             x_future = np.delete(x_future, 0, axis=0)
 
-            # Обновляем lag текущим предсказанием
             future_lag[0] = cur_val
             x_input = np.append(x_input, future_lag.reshape(1, 1, -1), axis=1)
 
-            # Обновляем LCR в последнем элементе
             x_input[0, -1, -1] = lcr
 
-        # Уменьшаем количество оставшихся точек для предсказания
         remaining_horizon -= current_points_to_predict
 
     return predict_values
-
-home_path = os.getcwd()
 
 
 params_path = os.path.join(home_path, params_file)
@@ -436,7 +417,6 @@ start_day = df_all_data[(df_all_data['time'] >= date_1) & (df_all_data['time'] <
 start_day_index = start_day.index[0]
 df_all_data_norm = df_all_data_norm[:start_day_index + 98 + 289]
 all_col = df_all_data_norm.columns
-print(f'Все доступные колонки - {all_col}')
 diff_cols = all_col.difference(col_for_train)
 
 # TODO Расчет LCR ------------------------------------------------------------------------------------------------------
@@ -476,117 +456,179 @@ if 'lcr' in col_for_train:
 x_future = df_test_no_lcr.values
 n_features = values.shape[1]
 
+save_best_weights_callback = SaveBestWeights()
+
 
 # TODO Здесь задаем конфигурацию модели слои и тд --------------------------------------------------------------------
 
 
+# TODO  ---------------------------------Построение разновидности моделей-----------------------------------------------
 
-save_best_weights_callback = SaveBestWeights()
 
-model = Sequential()
+# TODO ---------BI-LSTM model------------------------------------------------------------------------------------------
 
-# model.add(Bidirectional(LSTM(lstm0_units, activation=activation), input_shape=(lag, n_features)))
 
-model.add(Bidirectional(LSTM(lstm0_units, activation='softplus', return_sequences=True), input_shape=(lag, n_features)))
+bi_lstm_model = Sequential()
+
+bi_lstm_model.add(Bidirectional(LSTM(lstm0_units, activation='softplus', return_sequences=True), input_shape=(lag, n_features)))
 # model.add(Dropout(0.1))
 
-model.add(Bidirectional(LSTM(lstm1_units, activation=activation, return_sequences=True)))
+bi_lstm_model.add(Bidirectional(LSTM(lstm1_units, activation=activation, return_sequences=True)))
 # model.add(Dropout(0.1))
 
-model.add(Bidirectional(LSTM(lstm2_units, activation=activation)))
+bi_lstm_model.add(Bidirectional(LSTM(lstm2_units, activation=activation)))
 # model.add(Dropout(0.1))
-model.add(Dense(points_per_call, activation='linear',
-                kernel_regularizer=regularizers.l2(0.05)))
+bi_lstm_model.add(Dense(points_per_call, activation='linear',
+                kernel_regularizer=regularizers.l2(0.001)))
+
+bi_lstm_model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=['mae'])
 
 
-model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=['mae'])
+# TODO ---------LSTM model----------------------------------------------------------------------------------------------
 
-# TODO Обучение --------------------------------------------------------------------------------------------------------
-history = model.fit(X, y, epochs=epochs, verbose=1, callbacks=[save_best_weights_callback])
+lstm_model = Sequential()
 
-# TODO Прогноз ---------------------------------------------------------------------------------------------------------
+lstm_model.add(LSTM(lstm0_units, activation='softplus', return_sequences=True, input_shape=(lag, n_features)))
+# lstm_model.add(Dropout(0.1))
 
+lstm_model.add(LSTM(lstm1_units, activation=activation, return_sequences=True))
+# lstm_model.add(Dropout(0.1))
 
-x_input = create_x_input(df_train, lag)
-x_input = x_input.reshape((1, lag, n_features))
-if 'lcr' in col_for_train:
-    predict_values = make_predictions_lcr(x_input, x_future, points_per_call)
-else:
-    predict_values = make_predictions(x_input, x_future, points_per_call)
+lstm_model.add(LSTM(lstm2_units, activation=activation))
+# lstm_model.add(Dropout(0.1))
 
-# predict_values = make_predictions(x_input)
+lstm_model.add(Dense(points_per_call, activation='linear', kernel_regularizer=regularizers.l2(0.001)))
 
-print(f"Прогнозируемые значения : {predict_values}")
+lstm_model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=['mae'])
 
 
-predict_values = np.array(predict_values).flatten()
-
-df_forecast['P_l'] = predict_values
-df_forecast = replace_zeros_with_average(df_forecast, 'P_l')
-
-if len(diff_cols) > 0:
-    for col in diff_cols:
-        df_forecast[col] = df_true_all_col[col]
-
-df_forecast[col] = df_true_all_col[col]
-df_comparative = tn.df_denormalize_with_meta(df_forecast, min_val, max_val)
-df_true = tn.df_denormalize_with_meta(df_true_all_col, min_val, max_val)
+model_type_chitecture = {
+    "LSTM": lstm_model,
+    "Bi-LSTM": bi_lstm_model,
+}
 
 
-# TODO Отрисовка -------------------------------------------------------------------------------------------------------
-
-fig_p_l = make_subplots(rows=1, cols=1, subplot_titles=['P_l_real vs P_l_predict'])
-
-fig_p_l.add_trace(
-    go.Scatter(x=df_true['time'], y=df_true['P_l'], mode='lines', name='P_l_real', line=dict(color='blue')), row=1,
-    col=1)
-fig_p_l.add_trace(go.Scatter(x=df_comparative['time'], y=df_comparative['P_l'], mode='lines', name='P_l_predict',
-                             line=dict(color='orange')), row=1, col=1)
-template = "presentation"
-
-fig_p_l.show()
+BASE_PATH = f"{home_path}/experiments"
 
 
-y_true = df_true['P_l']
-y_pred = df_comparative['P_l']
+for model_type, model in model_type_chitecture.items():
 
-# TODO Метрики ---------------------------------------------------------------------------------------------------------
+    flag = f'>>> Current model - {model_type} <<<'
+    print("-"*len(flag))
+    print(flag)
+    print("-"*len(flag))
 
-rmse, r2, mae, mape, wmape = calculate_metrics(y_true=y_true, y_pred=y_pred)
-print(f'RMSE = {rmse}')
-print(f'R-squared = {r2}')
-print(f'MAE = {mae}')
-print(f'MAPE = {mape}')
-print(f'WMAPE = {wmape}')
+    model_dir = os.path.join(BASE_PATH, model_type)
+    if not os.path.exists(model_dir):
+        os.makedirs(model_dir)
 
-model.summary()
-# plot_model(model, show_shapes=True, to_file='model.png')
-# fig_p_l.write_image("fig_p_l.png")
+    destination_params = os.path.join(model_dir, 'params.yaml')
+    shutil.copy(params_file, destination_params)
+
+    destination_snapshot = os.path.join(model_dir, 'snapshot_combain.py')
+    shutil.copy(cur_running_path, destination_snapshot)
 
 
-# TODO Сохранение модели -----------------------------------------------------------------------------------------------
 
-name_model_dir = f'model_predict1'
-model_dir_path = '/Users/nikitasavvin/Desktop/Учеба/LCR_forecast'
-os.makedirs(model_dir_path, exist_ok=True)
-model_name = f'{name_model_dir}.h5'
-model.save(os.path.join(model_dir_path, model_name))
+    # TODO Обучение --------------------------------------------------------------------------------------------------------
+    history = model.fit(X, y, epochs=epochs, verbose=1, callbacks=[save_best_weights_callback])
 
-# params_file_path = os.path.join(model_dir_path, 'params.yaml')
-# with open(params_file_path, 'w') as params_file:
-#     yaml.dump(params, params_file, default_flow_style=False)
+    # TODO Прогноз ---------------------------------------------------------------------------------------------------------
 
-# TODO График потерь --------------------------------------------------------------------------------------------------
 
-# fig = go.Figure()
-# fig.add_trace(go.Scatter(x=list(range(1, len(history.history['loss']) + 1)), y=history.history['loss'], mode='lines'))
-# fig.update_layout(title='Model Training Loss (Interactive)',
-#                   xaxis_title='Epoch',
-#                   yaxis_title='Loss',
-#                   template='plotly_dark',
-#                   hovermode='x')
-#
-# html_file_path = os.path.join(model_dir_path, 'training_loss_plot_interactive.html')
-# fig.show()
-# fig.write_html(html_file_path)
-# print(name_model_dir)
+    x_input = create_x_input(df_train, lag)
+    x_input = x_input.reshape((1, lag, n_features))
+    if 'lcr' in col_for_train:
+        predict_values = make_predictions_lcr(x_input, x_future, points_per_call)
+    else:
+        predict_values = make_predictions(x_input, x_future, points_per_call)
+
+    predict_values = np.array(predict_values).flatten()
+
+    df_forecast['P_l'] = predict_values
+    df_forecast = replace_zeros_with_average(df_forecast, 'P_l')
+
+    if len(diff_cols) > 0:
+        for col in diff_cols:
+            df_forecast[col] = df_true_all_col[col]
+
+    df_forecast[col] = df_true_all_col[col]
+    df_comparative = tn.df_denormalize_with_meta(df_forecast, min_val, max_val)
+
+    df_predict = df_comparative.copy()
+    df_predict = df_predict[["P_l", "time"]]
+    path = f"{model_dir}/predict.xlsx"
+    df_predict.to_excel(path, index=False)
+
+    df_true = tn.df_denormalize_with_meta(df_true_all_col, min_val, max_val)
+
+
+    # TODO Отрисовка -------------------------------------------------------------------------------------------------------
+
+    fig_p_l = make_subplots(rows=1, cols=1, subplot_titles=['P_l_real vs P_l_predict'])
+
+    fig_p_l.add_trace(
+        go.Scatter(x=df_true['time'], y=df_true['P_l'], mode='lines', name='P_l_real', line=dict(color='blue')), row=1,
+        col=1)
+    fig_p_l.add_trace(go.Scatter(x=df_comparative['time'], y=df_comparative['P_l'], mode='lines', name='P_l_predict',
+                                 line=dict(color='orange')), row=1, col=1)
+    template = "presentation"
+
+    fig_p_l.update_layout(template="presentation")
+
+    output_path = f"{model_dir}/real_vs_predict.html"
+
+    fig_p_l.write_html(output_path)
+
+
+    y_true = df_true['P_l']
+    y_pred = df_comparative['P_l']
+
+    # TODO Метрики ---------------------------------------------------------------------------------------------------------
+
+    rmse, r2, mae, mape, wmape = calculate_metrics(y_true=y_true, y_pred=y_pred)
+
+    print(f'MAPE = {mape}')
+
+    metrix_dict = {
+        "RMSE": rmse,
+        "R-squared": r2,
+        "MAE": mae,
+        "MAPE": mape,
+        "WMAPE": wmape
+    }
+
+    df_metrics = pd.DataFrame(list(metrix_dict.items()), columns=['Metric', 'Value'])
+
+    output_path = f"{model_dir}/metrics.xlsx"
+    df_metrics.to_excel(output_path, index=False)
+
+
+    model.summary()
+
+    output_path = f"{model_dir}/model_summary.txt"
+
+    with open(output_path, "w") as f:
+        with io.StringIO() as buf:
+            model.summary(print_fn=lambda x: buf.write(x + "\n"))
+            f.write(buf.getvalue())
+
+
+    path = f"{model_dir}/model_architecture.png"
+
+    plot_model(model, show_shapes=True, to_file=path)
+
+
+    # TODO График потерь --------------------------------------------------------------------------------------------------
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=list(range(1, len(history.history['loss']) + 1)), y=history.history['loss'], mode='lines'))
+    fig.update_layout(title='Model Training Loss (Interactive)',
+                      xaxis_title='Epoch',
+                      yaxis_title='Loss',
+                      template='plotly_dark',
+                      hovermode='x')
+
+    html_file_path = os.path.join(model_dir, 'training_loss_plot_interactive.html')
+    fig.show()
+    fig.write_html(html_file_path)
