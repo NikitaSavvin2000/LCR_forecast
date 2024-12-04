@@ -15,7 +15,7 @@ from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.callbacks import Callback
 from sklearn.metrics import mean_squared_error, mean_absolute_error
-from tensorflow.keras.layers import LSTM, Dense, Bidirectional, Dropout
+from tensorflow.keras.layers import LSTM, Dense, Bidirectional, Dropout, Input, MaxPooling1D, Conv1D
 from tensorflow.keras import regularizers
 
 
@@ -34,19 +34,16 @@ cur_running_path = f"{home_path}/combain.py"
 
 
 def replace_zeros_with_average(df, column):
-    values = df[column].values  # Получаем значения колонки как numpy массив
+    values = df[column].values
     for i in range(len(values)):
         if values[i] == 0:
-            # Получаем предыдущее значение, если оно существует
             prev_value = values[i - 1] if i > 0 else None
-            # Получаем следующее значение, если оно существует
             next_value = values[i + 1] if i < len(values) - 1 else None
 
-            # Рассчитываем среднее из существующих значений
             neighbors = [v for v in [prev_value, next_value] if v is not None]
-            values[i] = np.mean(neighbors) if neighbors else 0  # Если соседей нет, оставляем 0
+            values[i] = np.mean(neighbors) if neighbors else 0
 
-    df[column] = values  # Обновляем колонку в DataFrame
+    df[column] = values
     return df
 
 
@@ -247,21 +244,14 @@ class SaveBestWeights(Callback):
 
 def calculate_metrics(y_true, y_pred):
     y_true_mean = y_true.mean()
-    # Расчет RMSE
     rmse = np.sqrt(mean_squared_error(y_true, y_pred))
 
-    # Расчет R^2
     ss_res = np.sum((y_true - y_pred) ** 2)
     ss_tot = np.sum((y_true - y_true_mean) ** 2)
+
     r2 = 1 - (ss_res / ss_tot)
-
-    # Расчет MAE
     mae = mean_absolute_error(y_true, y_pred)
-
-    # Расчет MAPE
     mape = np.mean(np.abs((y_true - y_pred) / y_true)) * 100
-
-    # Расчет WMAPE
     wmape = np.sum(np.abs(y_true - y_pred)) / np.sum(np.abs(y_true)) * 100
 
     return rmse, r2, mae, mape, wmape
@@ -317,7 +307,7 @@ def make_predictions(x_input, x_future, points_per_call):
 
 def calc_lcr(previous_val, cur_val):
     if previous_val == 0:
-        return cur_val  # Относительно 0 изменение равно текущему значению в процентах
+        return cur_val
 
     percentage_change = ((cur_val - previous_val) / abs(previous_val))
     return percentage_change
@@ -408,9 +398,6 @@ df_all_data_norm[['temperature', 'pressure',
 
 # TODO Дата с которой делаем прогноз на сутки вперед ------------------------------------------------------------------
 
-# df_all_data_norm = df_all_data_norm.iloc[int(len(df_all_data_norm)/2):]
-# df_all_data_norm = df_all_data_norm.iloc[:-20]
-
 date_1 = date_for_test + ' 00:00:00'
 date_2 = date_for_test + ' 00:05:00'
 start_day = df_all_data[(df_all_data['time'] >= date_1) & (df_all_data['time'] <= date_2)]
@@ -470,18 +457,14 @@ save_best_weights_callback = SaveBestWeights()
 
 bi_lstm_model = Sequential()
 
-bi_lstm_model.add(Bidirectional(LSTM(lstm0_units, activation='softplus', return_sequences=True), input_shape=(lag, n_features)))
-# model.add(Dropout(0.1))
+bi_lstm_model.add(Input(shape=(lag, n_features)))
 
+bi_lstm_model.add(Bidirectional(LSTM(lstm0_units, activation='softplus', return_sequences=True)))
 bi_lstm_model.add(Bidirectional(LSTM(lstm1_units, activation=activation, return_sequences=True)))
-# model.add(Dropout(0.1))
-
 bi_lstm_model.add(Bidirectional(LSTM(lstm2_units, activation=activation)))
-# model.add(Dropout(0.1))
-bi_lstm_model.add(Dense(points_per_call, activation='linear',
-                kernel_regularizer=regularizers.l2(0.001)))
+bi_lstm_model.add(Dense(points_per_call, activation='linear', kernel_regularizer=regularizers.l2(0.001)))
 
-bi_lstm_model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=['mae'])
+bi_lstm_model.compile(optimizer='adam', loss='mean_squared_error', metrics=['mae'])
 
 
 # TODO ---------LSTM model----------------------------------------------------------------------------------------------
@@ -489,22 +472,57 @@ bi_lstm_model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=['
 lstm_model = Sequential()
 
 lstm_model.add(LSTM(lstm0_units, activation='softplus', return_sequences=True, input_shape=(lag, n_features)))
-# lstm_model.add(Dropout(0.1))
-
 lstm_model.add(LSTM(lstm1_units, activation=activation, return_sequences=True))
-# lstm_model.add(Dropout(0.1))
-
 lstm_model.add(LSTM(lstm2_units, activation=activation))
-# lstm_model.add(Dropout(0.1))
-
 lstm_model.add(Dense(points_per_call, activation='linear', kernel_regularizer=regularizers.l2(0.001)))
 
 lstm_model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=['mae'])
 
 
+# TODO ---------CNN-LSTM model------------------------------------------------------------------------------------------
+
+cnn_lstm_model = Sequential()
+cnn_lstm_model.add(Conv1D(filters=64, kernel_size=1, activation='relu', input_shape=(lag, n_features)))
+cnn_lstm_model.add(MaxPooling1D(pool_size=1))
+
+cnn_lstm_model.add(Conv1D(filters=128, kernel_size=1, activation='relu'))
+cnn_lstm_model.add(MaxPooling1D(pool_size=1))
+
+cnn_lstm_model.add(LSTM(lstm0_units, activation='softplus', return_sequences=True))
+cnn_lstm_model.add(LSTM(lstm1_units, activation=activation, return_sequences=True))
+cnn_lstm_model.add(LSTM(lstm2_units, activation=activation))
+
+cnn_lstm_model.add(Dense(points_per_call, activation='linear', kernel_regularizer=regularizers.l2(0.001)))
+
+cnn_lstm_model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=['mae'])
+
+
+# TODO ---------CNN-BI-LSTM model---------------------------------------------------------------------------------------
+
+cnn_bi_lstm_model = Sequential()
+
+cnn_bi_lstm_model.add(Conv1D(filters=64, kernel_size=1, activation='relu', input_shape=(lag, n_features)))
+cnn_bi_lstm_model.add(MaxPooling1D(pool_size=1))
+
+cnn_bi_lstm_model.add(Conv1D(filters=128, kernel_size=1, activation='relu'))
+cnn_bi_lstm_model.add(MaxPooling1D(pool_size=1))
+
+cnn_bi_lstm_model.add(Bidirectional(LSTM(lstm0_units, activation='softplus', return_sequences=True)))
+cnn_bi_lstm_model.add(Bidirectional(LSTM(lstm1_units, activation=activation, return_sequences=True)))
+cnn_bi_lstm_model.add(Bidirectional(LSTM(lstm2_units, activation=activation)))
+
+cnn_bi_lstm_model.add(Dense(points_per_call, activation='linear', kernel_regularizer=regularizers.l2(0.001)))
+
+cnn_bi_lstm_model.compile(optimizer='adam', loss='mean_squared_error', metrics=['mae'])
+
+
+
+
 model_type_chitecture = {
     "LSTM": lstm_model,
     "Bi-LSTM": bi_lstm_model,
+    "CNN-LSTM": cnn_lstm_model
+    "CNN-BI-LSTM": cnn_bi_lstm_model
 }
 
 
@@ -580,6 +598,7 @@ for model_type, model in model_type_chitecture.items():
 
     fig_p_l.write_html(output_path)
 
+    fig_p_l.show()
 
     y_true = df_true['P_l']
     y_pred = df_comparative['P_l']

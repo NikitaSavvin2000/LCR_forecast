@@ -15,7 +15,7 @@ from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.callbacks import Callback
 from sklearn.metrics import mean_squared_error, mean_absolute_error
-from tensorflow.keras.layers import LSTM, Dense, Bidirectional, Dropout
+from tensorflow.keras.layers import LSTM, Dense, Bidirectional, Dropout, Conv1D, MaxPooling1D, Input
 from tensorflow.keras import regularizers
 
 
@@ -470,18 +470,14 @@ save_best_weights_callback = SaveBestWeights()
 
 bi_lstm_model = Sequential()
 
-bi_lstm_model.add(Bidirectional(LSTM(lstm0_units, activation='softplus', return_sequences=True), input_shape=(lag, n_features)))
-# model.add(Dropout(0.1))
+bi_lstm_model.add(Input(shape=(lag, n_features)))
 
+bi_lstm_model.add(Bidirectional(LSTM(lstm0_units, activation='softplus', return_sequences=True)))
 bi_lstm_model.add(Bidirectional(LSTM(lstm1_units, activation=activation, return_sequences=True)))
-# model.add(Dropout(0.1))
-
 bi_lstm_model.add(Bidirectional(LSTM(lstm2_units, activation=activation)))
-# model.add(Dropout(0.1))
-bi_lstm_model.add(Dense(points_per_call, activation='linear',
-                kernel_regularizer=regularizers.l2(0.001)))
+bi_lstm_model.add(Dense(points_per_call, activation='linear', kernel_regularizer=regularizers.l2(0.001)))
 
-bi_lstm_model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=['mae'])
+bi_lstm_model.compile(optimizer='adam', loss='mean_squared_error', metrics=['mae'])
 
 
 # TODO ---------LSTM model----------------------------------------------------------------------------------------------
@@ -489,22 +485,38 @@ bi_lstm_model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=['
 lstm_model = Sequential()
 
 lstm_model.add(LSTM(lstm0_units, activation='softplus', return_sequences=True, input_shape=(lag, n_features)))
-# lstm_model.add(Dropout(0.1))
-
 lstm_model.add(LSTM(lstm1_units, activation=activation, return_sequences=True))
-# lstm_model.add(Dropout(0.1))
-
 lstm_model.add(LSTM(lstm2_units, activation=activation))
-# lstm_model.add(Dropout(0.1))
-
 lstm_model.add(Dense(points_per_call, activation='linear', kernel_regularizer=regularizers.l2(0.001)))
 
 lstm_model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=['mae'])
 
 
+# TODO ---------CNN-LSTM model----------------------------------------------------------------------------------------------
+
+cnn_lstm_model = Sequential()
+cnn_lstm_model.add(Conv1D(filters=64, kernel_size=3, activation='relu', input_shape=(lag, n_features)))
+cnn_lstm_model.add(MaxPooling1D(pool_size=2))
+
+cnn_lstm_model.add(Conv1D(filters=128, kernel_size=3, activation='relu'))
+cnn_lstm_model.add(MaxPooling1D(pool_size=2))
+
+cnn_lstm_model.add(LSTM(lstm0_units, activation='softplus', return_sequences=True))
+cnn_lstm_model.add(LSTM(lstm1_units, activation=activation, return_sequences=True))
+cnn_lstm_model.add(LSTM(lstm2_units, activation=activation))
+
+cnn_lstm_model.add(Dense(points_per_call, activation='linear', kernel_regularizer=regularizers.l2(0.001)))
+
+cnn_lstm_model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=['mae'])
+
+
+# TODO ---------CNN-BI-LSTM model----------------------------------------------------------------------------------------------
+
+
 model_type_chitecture = {
-    "LSTM": lstm_model,
-    "Bi-LSTM": bi_lstm_model,
+    # "LSTM": lstm_model,
+    # "Bi-LSTM": bi_lstm_model,
+    "CNN-LSTM": cnn_lstm_model
 }
 
 
