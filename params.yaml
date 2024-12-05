@@ -1,15 +1,13 @@
-csv_train_data: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSyB_kQrfmaoG2nwsE0DbOMnyNbFUyH9IDKBJhR8yo4JdGAcLSTS1NTC2_Z4BIbwnRuIg58WChttoWa/pub?gid=1835661926&single=true&output=csv'
-lstm0_units: 10
+csv_train_data: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRFF6SXvGbQgQG1bh0hwbXgVWpUU_UG8OQAVhHcNAcAFT5x-XoIYxMAeF-goym6_wNhJEwQd3iGHp9b/pub?gid=791211028&single=true&output=csv'
+cnn0_units: 64
+cnn1_units: 128
+lstm0_units: 30
 lstm1_units: 20
-lstm2_units: 30
-
-lag: 12
+lstm2_units: 10
+lag: 4
 points_per_call: 16
-
-dropout_count: 0.0
-dense_units: 30
+regularizers_l2: 0.2
+recurrent_dropout_rate: 0.2
 activation: 'relu'
-#activation: 'tanh'
-
 optimizer: 'adam'
 epochs: 3

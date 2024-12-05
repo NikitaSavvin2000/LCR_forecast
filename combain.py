@@ -15,7 +15,7 @@ from sklearn.preprocessing import MinMaxScaler
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.callbacks import Callback
 from sklearn.metrics import mean_squared_error, mean_absolute_error
-from tensorflow.keras.layers import LSTM, Dense, Bidirectional, Dropout, Input, MaxPooling1D, Conv1D
+from tensorflow.keras.layers import LSTM, Dense, Bidirectional, Dropout, Input, MaxPooling1D, Conv1D, Embedding, BatchNormalization, Reshape
 from tensorflow.keras import regularizers
 
 
@@ -368,16 +368,19 @@ csv_train_data = params['csv_train_data']
 lstm0_units = params['lstm0_units']
 lstm1_units = params['lstm1_units']
 lstm2_units = params['lstm2_units']
+regularizers_l2 = params["regularizers_l2"]
+recurrent_dropout_rate = params["recurrent_dropout_rate"]
+cnn0_units = params["cnn0_units"]
+cnn1_units = params["cnn1_units"]
 
 lag = params['lag']
 activation = params['activation']
 optimizer = params['optimizer']
-dense_units = params['dense_units']
-dropout_count = params['dropout_count']
 epochs = params['epochs']
 points_per_call = params['points_per_call']
 
 df_all_data = pd.read_csv(csv_train_data)
+
 df_all_data['time'] = pd.to_datetime(df_all_data['time']).apply(lambda x: x.replace(second=0))
 df_all_data = df_all_data.sort_values(by='time')
 df_all_data['time'] = df_all_data['time'].dt.strftime('%Y-%m-%d %H:%M:%S')
@@ -403,21 +406,21 @@ date_2 = date_for_test + ' 00:05:00'
 start_day = df_all_data[(df_all_data['time'] >= date_1) & (df_all_data['time'] <= date_2)]
 start_day_index = start_day.index[0]
 df_all_data_norm = df_all_data_norm[:start_day_index + 98 + 289]
+# df_all_data_norm = df_all_data_norm[:start_day_index + 289]
+
 all_col = df_all_data_norm.columns
 
 # TODO Расчет LCR ------------------------------------------------------------------------------------------------------
 
-
-
 df_all_data_norm['lcr'] = (df_all_data_norm['P_l'].shift(1) - df_all_data_norm['P_l']) / df_all_data_norm['P_l']
+
 df_all_data_norm['lcr'] = df_all_data_norm['lcr'].shift(1)
 df_all_data_norm = df_all_data_norm[2:]
 df_all_data_norm = df_all_data_norm.reset_index()
 
 
-# model_type_chitecture = ["LSTM", "Bi-LSTM", "CNN-LSTM", "CNN-BI-LSTM"]
+model_type_chitecture = ["LSTM", "Bi-LSTM", "CNN-LSTM", "CNN-BI-LSTM"]
 
-model_type_chitecture = ["Bi-LSTM"]
 
 case_A = ['P_l',  'week', 'day_of_week', 'hour', 'minute',]
 case_B = ['P_l',  'week', 'day_of_week', 'hour', 'minute', 'temperature']
@@ -425,15 +428,19 @@ case_C = ['P_l',  'week', 'day_of_week', 'hour', 'minute', 'hour_cos', 'week_cos
 case_D = ['P_l',  'week', 'day_of_week', 'hour', 'minute', 'hour_cos', 'week_cos', 'temperature']
 case_E = ['P_l',  'week', 'day_of_week', 'hour', 'minute', 'lcr']
 case_F = ['P_l', 'week', 'day_of_week', 'hour', 'minute', 'hour_sin', 'hour_cos', 'day_of_week_sin', 'day_of_week_cos', 'week_sin', 'week_cos', 'lcr']
+case_G = ['P_l', 'week', 'day_of_week', 'hour', 'minute', 'hour_sin', 'hour_cos', 'day_of_week_sin', 'day_of_week_cos', 'week_sin', 'week_cos']
+
 
 
 train_col_dict = {
-    # 'case_A': case_A,
-    # 'case_B': case_B,
-    # 'case_C': case_C,
-    # 'case_D': case_D,
-    # 'case_E': case_E,
+    'case_A': case_A,
+    'case_B': case_B,
+    'case_C': case_C,
+    'case_D': case_D,
+    'case_E': case_E,
     'case_F': case_F,
+    'case_G': case_G,
+
 }
 
 
@@ -462,7 +469,6 @@ for model_type in model_type_chitecture:
         destination_snapshot = os.path.join(dir, 'snapshot_combain.py')
         shutil.copy(cur_running_path, destination_snapshot)
         for i in range(1, count_experements+1):
-        # for i in range(start_value, start_value + count_experements * step, step):
             tf.keras.utils.set_random_seed(91)
             tf.config.experimental.enable_op_determinism()
 
@@ -525,15 +531,16 @@ for model_type in model_type_chitecture:
 
             # TODO ---------BI-LSTM model------------------------------------------------------------------------------------------
 
+
             if model_type == 'Bi-LSTM':
                 bi_lstm_model = Sequential()
 
                 bi_lstm_model.add(Input(shape=(lag, n_features)))
 
-                bi_lstm_model.add(Bidirectional(LSTM(lstm0_units, activation='softplus', return_sequences=True)))
-                bi_lstm_model.add(Bidirectional(LSTM(lstm1_units, activation=activation, return_sequences=True)))
-                bi_lstm_model.add(Bidirectional(LSTM(lstm2_units, activation=activation)))
-                bi_lstm_model.add(Dense(points_per_call, activation='linear', kernel_regularizer=regularizers.l2(0.001)))
+                bi_lstm_model.add(Bidirectional(LSTM(lstm0_units, activation='softplus',recurrent_dropout=recurrent_dropout_rate, return_sequences=True)))
+                bi_lstm_model.add(Bidirectional(LSTM(lstm1_units, activation=activation, recurrent_dropout=recurrent_dropout_rate, return_sequences=True)))
+                bi_lstm_model.add(Bidirectional(LSTM(lstm2_units, activation=activation, recurrent_dropout=recurrent_dropout_rate)))
+                bi_lstm_model.add(Dense(points_per_call, activation='linear', kernel_regularizer=regularizers.l2(regularizers_l2)))
 
                 bi_lstm_model.compile(optimizer='adam', loss='mean_squared_error', metrics=['mae'])
                 model = bi_lstm_model
@@ -543,10 +550,10 @@ for model_type in model_type_chitecture:
             if model_type == 'LSTM':
                 lstm_model = Sequential()
 
-                lstm_model.add(LSTM(lstm0_units, activation='softplus', return_sequences=True, input_shape=(lag, n_features)))
-                lstm_model.add(LSTM(lstm1_units, activation=activation, return_sequences=True))
-                lstm_model.add(LSTM(lstm2_units, activation=activation))
-                lstm_model.add(Dense(points_per_call, activation='linear', kernel_regularizer=regularizers.l2(0.001)))
+                lstm_model.add(LSTM(lstm0_units, activation='softplus', return_sequences=True ,recurrent_dropout=recurrent_dropout_rate, input_shape=(lag, n_features)))
+                lstm_model.add(LSTM(lstm1_units, activation=activation, return_sequences=True,recurrent_dropout=recurrent_dropout_rate))
+                lstm_model.add(LSTM(lstm2_units, activation=activation,recurrent_dropout=recurrent_dropout_rate))
+                lstm_model.add(Dense(points_per_call, activation='linear', kernel_regularizer=regularizers.l2(regularizers_l2)))
 
                 lstm_model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=['mae'])
                 model = lstm_model
@@ -557,17 +564,17 @@ for model_type in model_type_chitecture:
             if model_type == 'CNN-LSTM':
 
                 cnn_lstm_model = Sequential()
-                cnn_lstm_model.add(Conv1D(filters=64, kernel_size=1, activation='relu', input_shape=(lag, n_features)))
+                cnn_lstm_model.add(Conv1D(filters=cnn0_units, kernel_size=1, activation=activation, input_shape=(lag, n_features)))
                 cnn_lstm_model.add(MaxPooling1D(pool_size=1))
 
-                cnn_lstm_model.add(Conv1D(filters=128, kernel_size=1, activation='relu'))
+                cnn_lstm_model.add(Conv1D(filters=cnn1_units, kernel_size=1,  activation=activation))
                 cnn_lstm_model.add(MaxPooling1D(pool_size=1))
 
-                cnn_lstm_model.add(LSTM(lstm0_units, activation='softplus', return_sequences=True))
-                cnn_lstm_model.add(LSTM(lstm1_units, activation=activation, return_sequences=True))
-                cnn_lstm_model.add(LSTM(lstm2_units, activation=activation))
+                cnn_lstm_model.add(LSTM(lstm0_units, activation='softplus', return_sequences=True, recurrent_dropout=recurrent_dropout_rate))
+                cnn_lstm_model.add(LSTM(lstm1_units, activation=activation, return_sequences=True, recurrent_dropout=recurrent_dropout_rate))
+                cnn_lstm_model.add(LSTM(lstm2_units, activation=activation, recurrent_dropout=recurrent_dropout_rate))
 
-                cnn_lstm_model.add(Dense(points_per_call, activation='linear', kernel_regularizer=regularizers.l2(0.001)))
+                cnn_lstm_model.add(Dense(points_per_call, activation='linear', kernel_regularizer=regularizers.l2(regularizers_l2)))
 
                 cnn_lstm_model.compile(optimizer=optimizer, loss='mean_squared_error', metrics=['mae'])
                 model = cnn_lstm_model
@@ -577,23 +584,22 @@ for model_type in model_type_chitecture:
 
             if model_type == 'CNN-BI-LSTM':
                 cnn_bi_lstm_model = Sequential()
+                cnn_lstm_model = Sequential()
+                cnn_lstm_model.add(Conv1D(filters=cnn0_units, kernel_size=1, activation=activation, input_shape=(lag, n_features)))
+                cnn_lstm_model.add(MaxPooling1D(pool_size=1))
 
-                cnn_bi_lstm_model.add(Conv1D(filters=64, kernel_size=1, activation='relu', input_shape=(lag, n_features)))
-                cnn_bi_lstm_model.add(MaxPooling1D(pool_size=1))
+                cnn_lstm_model.add(Conv1D(filters=cnn1_units, kernel_size=1,  activation=activation))
+                cnn_lstm_model.add(MaxPooling1D(pool_size=1))
 
-                cnn_bi_lstm_model.add(Conv1D(filters=128, kernel_size=1, activation='relu'))
-                cnn_bi_lstm_model.add(MaxPooling1D(pool_size=1))
+                cnn_bi_lstm_model.add(Bidirectional(LSTM(lstm0_units, activation='softplus',recurrent_dropout=recurrent_dropout_rate, return_sequences=True)))
+                cnn_bi_lstm_model.add(Bidirectional(LSTM(lstm1_units, activation=activation, recurrent_dropout=recurrent_dropout_rate, return_sequences=True)))
+                cnn_bi_lstm_model.add(Bidirectional(LSTM(lstm2_units, activation=activation, recurrent_dropout=recurrent_dropout_rate)))
 
-                cnn_bi_lstm_model.add(Bidirectional(LSTM(lstm0_units, activation='softplus', return_sequences=True)))
-                cnn_bi_lstm_model.add(Bidirectional(LSTM(lstm1_units, activation=activation, return_sequences=True)))
-                cnn_bi_lstm_model.add(Bidirectional(LSTM(lstm2_units, activation=activation)))
-
-                cnn_bi_lstm_model.add(Dense(points_per_call, activation='linear', kernel_regularizer=regularizers.l2(0.001)))
+                cnn_bi_lstm_model.add(Dense(points_per_call, activation='linear', kernel_regularizer=regularizers.l2(regularizers_l2)))
 
                 cnn_bi_lstm_model.compile(optimizer='adam', loss='mean_squared_error', metrics=['mae'])
 
                 model = cnn_bi_lstm_model
-
 
 
             # TODO Обучение --------------------------------------------------------------------------------------------------------
@@ -610,6 +616,8 @@ for model_type in model_type_chitecture:
                 predict_values = make_predictions(x_input, x_future, points_per_call)
 
             predict_values = np.array(predict_values).flatten()
+
+            print(predict_values)
 
             df_forecast['P_l'] = predict_values
             df_forecast = replace_zeros_with_average(df_forecast, 'P_l')
@@ -687,5 +695,4 @@ for model_type in model_type_chitecture:
 
 df = pd.DataFrame(list(res_dict.items()), columns=['path', 'mape'])
 
-df.to_excel(f'{BASE_PATH}/results.xlsx', index=False)
 df.to_csv(f'{BASE_PATH}/results.csv', index=False)
